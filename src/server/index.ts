@@ -1,27 +1,36 @@
 // HayahAI SDK — Server entry point
-// Re-exports all server-side RAG/training/tools from the knowledge-base-sdk
+// All server-side RAG/training/tools consolidated from knowledge-base-sdk
 
+// Core DB
+export { executeQuery, getPool } from "./core/db";
+
+// Embeddings
+export { getEmbeddings } from "./core/embeddings";
+
+// Vector store
+export { similaritySearch } from "./core/vectorstore";
+
+// Storage
 export {
-  // Core DB
-  executeQuery,
-  getPool,
-  // Embeddings
-  getEmbeddings,
-  // Vector store
-  similaritySearch,
-  // Storage
   uploadFileToS3,
   uploadFilesToS3,
   uploadFileToContextFolder,
   uploadFilesToContextFolder,
   deleteFileFromS3,
-  // Chat memory
+} from "./core/storage";
+
+// Chat memory
+export {
   appendChatMessage,
   appendChatMessages,
   getThreadMessages,
-  // Chat handler
-  createChatHandler,
-  // Training
+} from "./core/chatMemory";
+
+// Chat handler
+export { createChatHandler } from "./core/chat";
+
+// Training
+export {
   trainAgent,
   getAgentStatus,
   listAgents,
@@ -29,18 +38,27 @@ export {
   deleteFile,
   updateAgent,
   deleteAgent,
-  // Retrieval
+} from "./core/training";
+
+// Retrieval
+export {
   queryAgent,
   queryAgentWithTools,
   streamQueryAgent,
-  // Tools
+} from "./core/retrieval";
+
+// Tools
+export {
   createSearchTripsTool,
   createGetFareRatesTool,
   createGetVehicleRatesTool,
-  // Client
-  KnowledgeBaseClient,
-} from "@ayahay/knowledge-base-sdk";
+} from "./core/tools";
+export type { ToolContext } from "./core/tools";
 
+// Client SDK (browser/frontend)
+export { KnowledgeBaseClient } from "./client/KnowledgeBaseClient";
+
+// Types
 export type {
   Document,
   TrainingResult,
@@ -48,14 +66,19 @@ export type {
   AgentFile,
   TrainOptions,
   QueryOptions,
-  ChatMessageRow,
-  AppendChatMessageInput,
-  GetThreadMessagesInput,
-  CreateChatHandlerOptions,
-  UploadResult,
   ClientConfig,
   ClientTrainRequest,
   ClientQueryRequest,
   ClientQueryResponse,
-  ToolContext,
-} from "@ayahay/knowledge-base-sdk";
+} from "./types";
+
+// Chat types
+export type {
+  ChatMessageRow,
+  AppendChatMessageInput,
+  GetThreadMessagesInput,
+} from "./core/chatMemory";
+export type { CreateChatHandlerOptions } from "./core/chat";
+
+// Storage types
+export type { UploadResult } from "./core/storage";

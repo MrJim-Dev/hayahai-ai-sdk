@@ -193,5 +193,5 @@ export interface HayahAIClientConfig {
     /** Custom fetch implementation */
     fetch?: typeof fetch;
 }
-export type { Document, TrainingResult, Agent, AgentFile, TrainOptions, QueryOptions, ClientConfig, ClientTrainRequest, ClientQueryRequest, ClientQueryResponse, } from "@ayahay/knowledge-base-sdk";
+export type { Document, TrainingResult, Agent, AgentFile, TrainOptions, QueryOptions, ClientConfig, ClientTrainRequest, ClientQueryRequest, ClientQueryResponse, } from "./server/types";
 //# sourceMappingURL=types.d.ts.map

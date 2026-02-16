@@ -223,4 +223,4 @@ export type {
   ClientTrainRequest,
   ClientQueryRequest,
   ClientQueryResponse,
-} from "@ayahay/knowledge-base-sdk";
+} from "./server/types";

@@ -1,6 +1,6 @@
 {
   "name": "@oltek/hayahai-sdk",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "HayahAI SDK — Customizable AI chatbot & trip search widgets, API client, and server-side RAG engine",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JivSTuban/hayahai-sdk.git"
+    "url": "git+https://dev.azure.com/ayahay/Ayahay%20V2/_git/hayahai-ai-sdk"
   },
   "scripts": {
     "build": "tsc",
@@ -55,7 +55,17 @@
   "author": "Oltek Solutions",
   "license": "MIT",
   "dependencies": {
-    "@ayahay/knowledge-base-sdk": "https://github.com/JivSTuban/knowledge-base-sdk.git#v1.2.4"
+    "@aws-sdk/client-s3": "^3.958.0",
+    "@aws-sdk/lib-storage": "^3.958.0",
+    "@langchain/core": "^1.1.17",
+    "@langchain/openai": "^1.2.3",
+    "@langchain/textsplitters": "^1.0.1",
+    "cheerio": "^1.2.0",
+    "kysely": "^0.28.9",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.17.2",
+    "uuid": "^11.1.0",
+    "zod": "^4.3.6"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
@@ -67,8 +77,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.7",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.16.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
     "typescript": "^5.9.3"
   }
 }
