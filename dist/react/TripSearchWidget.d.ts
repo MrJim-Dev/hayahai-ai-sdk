@@ -1,0 +1,3 @@
+import type { TripSearchWidgetProps } from "../types";
+export default function TripSearchWidget({ chatApiUrl, routesApiUrl, tripsApiUrl, configApiUrl, tenantId, agentConfig: propConfig, theme: themeOverrides, displayName: propDisplayName, welcomeMessage: propWelcomeMessage, showFormToggle, onSwitchToForm, onTripSelect, poweredByText, className, currency, locale, }: TripSearchWidgetProps): import("react/jsx-runtime").JSX.Element;
+//# sourceMappingURL=TripSearchWidget.d.ts.map

@@ -1,0 +1,74 @@
+{
+  "name": "@oltek/hayahai-sdk",
+  "version": "1.0.0",
+  "description": "HayahAI SDK — Customizable AI chatbot & trip search widgets, API client, and server-side RAG engine",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "@oltek:registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JivSTuban/hayahai-sdk.git"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "rm -rf dist"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./theme": {
+      "types": "./dist/theme.d.ts",
+      "default": "./dist/theme.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "react": ["dist/react/index.d.ts"],
+      "server": ["dist/server/index.d.ts"],
+      "theme": ["dist/theme.d.ts"]
+    }
+  },
+  "keywords": [
+    "hayahai",
+    "oltek",
+    "chatbot",
+    "trip-search",
+    "ai-widget",
+    "rag",
+    "knowledge-base",
+    "pgvector"
+  ],
+  "author": "Oltek Solutions",
+  "license": "MIT",
+  "dependencies": {
+    "@ayahay/knowledge-base-sdk": "https://github.com/JivSTuban/knowledge-base-sdk.git#v1.2.4"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "react-dom": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.9.3"
+  }
+}

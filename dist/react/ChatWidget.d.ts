@@ -1,0 +1,3 @@
+import type { ChatWidgetProps } from "../types";
+export default function ChatWidget({ chatApiUrl, configApiUrl, tenantId, agentId: propAgentId, threadId: propThreadId, theme: themeOverrides, displayName: propDisplayName, welcomeMessage: propWelcomeMessage, subtitle, position, defaultOpen, poweredByText, onMessageSent, onResponseReceived, onError, className, zIndex, }: ChatWidgetProps): import("react/jsx-runtime").JSX.Element;
+//# sourceMappingURL=ChatWidget.d.ts.map
