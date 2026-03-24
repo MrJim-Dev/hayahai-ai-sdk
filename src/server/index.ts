@@ -52,6 +52,10 @@ export {
   createSearchTripsTool,
   createGetFareRatesTool,
   createGetVehicleRatesTool,
+  createEscalateToSupportTool,
+  createCheckBookingStatusTool,
+  createGetPortInfoTool,
+  createGetScheduleSummaryTool,
 } from "./core/tools";
 export type { ToolContext } from "./core/tools";
 
