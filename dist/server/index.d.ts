@@ -6,7 +6,7 @@ export { appendChatMessage, appendChatMessages, getThreadMessages, } from "./cor
 export { createChatHandler } from "./core/chat";
 export { trainAgent, getAgentStatus, listAgents, getAgentFiles, deleteFile, updateAgent, deleteAgent, } from "./core/training";
 export { queryAgent, queryAgentWithTools, streamQueryAgent, } from "./core/retrieval";
-export { createSearchTripsTool, createGetFareRatesTool, createGetVehicleRatesTool, } from "./core/tools";
+export { createSearchTripsTool, createGetFareRatesTool, createGetVehicleRatesTool, createEscalateToSupportTool, createCheckBookingStatusTool, createGetPortInfoTool, createGetScheduleSummaryTool, } from "./core/tools";
 export type { ToolContext } from "./core/tools";
 export { KnowledgeBaseClient } from "./client/KnowledgeBaseClient";
 export type { Document, TrainingResult, Agent, AgentFile, TrainOptions, QueryOptions, ClientConfig, ClientTrainRequest, ClientQueryRequest, ClientQueryResponse, } from "./types";

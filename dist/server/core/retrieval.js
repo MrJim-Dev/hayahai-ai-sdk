@@ -142,7 +142,9 @@ You have access to live data tools for real-time trip and fare information:
 - For live schedules, availability, or pricing → USE TOOLS
 - For general info about Ayahay, services, policies → USE TRAINING DATA (context)
 
-Always use tools for real-time data. Your training data is for general information only.`;
+Always use tools for real-time data. Your training data is for general information only.
+
+**Timezone:** All trip times are stored in UTC. ALWAYS convert and display times in Philippine Time (PHT, UTC+8). For example, a departure at 2026-03-25T02:00:00Z should be shown as "10:00 AM PHT".`;
         }
     }
     // Build messages array with history
@@ -332,7 +334,9 @@ You have access to live data tools for real-time trip and fare information:
 - For live schedules, availability, or pricing → USE TOOLS
 - For general info about Ayahay, services, policies → USE TRAINING DATA (context)
 
-Always use tools for real-time data. Your training data is for general information only.`;
+Always use tools for real-time data. Your training data is for general information only.
+
+**Timezone:** All trip times are stored in UTC. ALWAYS convert and display times in Philippine Time (PHT, UTC+8). For example, a departure at 2026-03-25T02:00:00Z should be shown as "10:00 AM PHT".`;
         }
     }
     // Build messages array with history

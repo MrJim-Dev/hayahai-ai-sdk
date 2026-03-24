@@ -2,7 +2,7 @@
 // HayahAI SDK — Server entry point
 // All server-side RAG/training/tools consolidated from knowledge-base-sdk
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.KnowledgeBaseClient = exports.createGetVehicleRatesTool = exports.createGetFareRatesTool = exports.createSearchTripsTool = exports.streamQueryAgent = exports.queryAgentWithTools = exports.queryAgent = exports.deleteAgent = exports.updateAgent = exports.deleteFile = exports.getAgentFiles = exports.listAgents = exports.getAgentStatus = exports.trainAgent = exports.createChatHandler = exports.getThreadMessages = exports.appendChatMessages = exports.appendChatMessage = exports.deleteFileFromS3 = exports.uploadFilesToContextFolder = exports.uploadFileToContextFolder = exports.uploadFilesToS3 = exports.uploadFileToS3 = exports.similaritySearch = exports.getEmbeddings = exports.getPool = exports.executeQuery = void 0;
+exports.KnowledgeBaseClient = exports.createGetScheduleSummaryTool = exports.createGetPortInfoTool = exports.createCheckBookingStatusTool = exports.createEscalateToSupportTool = exports.createGetVehicleRatesTool = exports.createGetFareRatesTool = exports.createSearchTripsTool = exports.streamQueryAgent = exports.queryAgentWithTools = exports.queryAgent = exports.deleteAgent = exports.updateAgent = exports.deleteFile = exports.getAgentFiles = exports.listAgents = exports.getAgentStatus = exports.trainAgent = exports.createChatHandler = exports.getThreadMessages = exports.appendChatMessages = exports.appendChatMessage = exports.deleteFileFromS3 = exports.uploadFilesToContextFolder = exports.uploadFileToContextFolder = exports.uploadFilesToS3 = exports.uploadFileToS3 = exports.similaritySearch = exports.getEmbeddings = exports.getPool = exports.executeQuery = void 0;
 // Core DB
 var db_1 = require("./core/db");
 Object.defineProperty(exports, "executeQuery", { enumerable: true, get: function () { return db_1.executeQuery; } });
@@ -47,6 +47,10 @@ var tools_1 = require("./core/tools");
 Object.defineProperty(exports, "createSearchTripsTool", { enumerable: true, get: function () { return tools_1.createSearchTripsTool; } });
 Object.defineProperty(exports, "createGetFareRatesTool", { enumerable: true, get: function () { return tools_1.createGetFareRatesTool; } });
 Object.defineProperty(exports, "createGetVehicleRatesTool", { enumerable: true, get: function () { return tools_1.createGetVehicleRatesTool; } });
+Object.defineProperty(exports, "createEscalateToSupportTool", { enumerable: true, get: function () { return tools_1.createEscalateToSupportTool; } });
+Object.defineProperty(exports, "createCheckBookingStatusTool", { enumerable: true, get: function () { return tools_1.createCheckBookingStatusTool; } });
+Object.defineProperty(exports, "createGetPortInfoTool", { enumerable: true, get: function () { return tools_1.createGetPortInfoTool; } });
+Object.defineProperty(exports, "createGetScheduleSummaryTool", { enumerable: true, get: function () { return tools_1.createGetScheduleSummaryTool; } });
 // Client SDK (browser/frontend)
 var KnowledgeBaseClient_1 = require("./client/KnowledgeBaseClient");
 Object.defineProperty(exports, "KnowledgeBaseClient", { enumerable: true, get: function () { return KnowledgeBaseClient_1.KnowledgeBaseClient; } });
