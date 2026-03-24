@@ -1,4 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
+import { ChatGroq } from "@langchain/groq";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
@@ -7,33 +10,138 @@ import { Document, QueryOptions, ChatMessage } from "../types";
 import { executeQuery } from "./db";
 import { createSearchTripsTool, createGetFareRatesTool, createGetVehicleRatesTool, ToolContext } from "./tools";
 
-let llm: ChatOpenAI | null = null;
+let llm: BaseChatModel | null = null;
+let currentProvider: string = "none";
 
 // Agent cache for performance optimization
 const agentCache = new Map<string, { chain: any; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-function getChatModel(): ChatOpenAI {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-        throw new Error("OPENAI_API_KEY is not set");
+/**
+ * Provider configuration for the fallback chain.
+ * Order: OpenAI (primary) → Groq (fast, free) → Gemini (generous free tier)
+ */
+interface ProviderConfig {
+    name: string;
+    create: () => BaseChatModel | null;
+}
+
+const providers: ProviderConfig[] = [
+    {
+        name: "openai",
+        create: () => {
+            const apiKey = process.env.OPENAI_API_KEY;
+            if (!apiKey) return null;
+            return new ChatOpenAI({
+                apiKey,
+                model: "gpt-4o",
+                temperature: 0.7,
+                streaming: true,
+                maxTokens: 1024,
+                maxRetries: 0,
+                timeout: 30000,
+                callbacks: [],
+            });
+        },
+    },
+    {
+        name: "groq",
+        create: () => {
+            const apiKey = process.env.GROQ_API_KEY;
+            if (!apiKey) return null;
+            return new ChatGroq({
+                apiKey,
+                model: "llama-3.3-70b-versatile",
+                temperature: 0.7,
+                maxTokens: 1024,
+                maxRetries: 0,
+            });
+        },
+    },
+    {
+        name: "gemini",
+        create: () => {
+            const apiKey = process.env.GOOGLE_GENAI_API_KEY;
+            if (!apiKey) return null;
+            return new ChatGoogleGenerativeAI({
+                apiKey,
+                model: "gemini-2.5-flash",
+                temperature: 0.7,
+                maxOutputTokens: 1024,
+            });
+        },
+    },
+];
+
+function isRateLimitError(error: any): boolean {
+    const status = error?.response?.status || error?.status || error?.code;
+    const message = (error?.message || "").toLowerCase();
+    return (
+        status === 429 ||
+        message.includes("rate limit") ||
+        message.includes("rate_limit") ||
+        message.includes("quota") ||
+        message.includes("too many requests") ||
+        message.includes("resource_exhausted")
+    );
+}
+
+function getChatModel(): BaseChatModel {
+    if (llm) return llm;
+
+    for (const provider of providers) {
+        const model = provider.create();
+        if (model) {
+            llm = model;
+            currentProvider = provider.name;
+            console.log(`[LLM] Using provider: ${provider.name}`);
+            return llm;
+        }
     }
 
-    if (!llm) {
-        llm = new ChatOpenAI({
-            apiKey,
-            model: "gpt-4o",
-            temperature: 0.7,
-            streaming: true,
-            maxTokens: 1024,
-            maxRetries: 0, // Disable retries completely - no tiktoken!
-            timeout: 30000, // 30 second timeout
-            // Disable all callbacks that might trigger tiktoken
-            callbacks: [],
-        });
+    throw new Error("No AI provider configured. Set at least one of: OPENAI_API_KEY, GROQ_API_KEY, GOOGLE_GENAI_API_KEY");
+}
+
+/**
+ * Execute an LLM call with automatic fallback on rate limit errors.
+ * Tries the current provider first, then falls through to the next available provider.
+ */
+async function withFallback<T>(fn: (model: BaseChatModel) => Promise<T>): Promise<T> {
+    const startIdx = providers.findIndex(p => p.name === currentProvider);
+
+    for (let i = 0; i < providers.length; i++) {
+        const idx = (startIdx + i) % providers.length;
+        const provider = providers[idx];
+
+        // Skip if this isn't the current provider and we haven't failed yet
+        if (i === 0) {
+            try {
+                return await fn(getChatModel());
+            } catch (error: any) {
+                if (!isRateLimitError(error)) throw error;
+                console.warn(`[LLM] Rate limited by ${currentProvider}, trying next provider...`);
+                // Clear cached model so we try the next one
+                llm = null;
+                agentCache.clear();
+            }
+        } else {
+            const model = provider.create();
+            if (!model) continue;
+
+            try {
+                llm = model;
+                currentProvider = provider.name;
+                console.log(`[LLM] Falling back to: ${provider.name}`);
+                return await fn(model);
+            } catch (error: any) {
+                if (!isRateLimitError(error)) throw error;
+                console.warn(`[LLM] Rate limited by ${provider.name} too, trying next...`);
+                llm = null;
+            }
+        }
     }
 
-    return llm;
+    throw new Error("All AI providers are rate limited. Please try again later.");
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant trained on specific documents.
@@ -50,62 +158,44 @@ const formatDocs = (docs: Document[]): string => {
         .join("\n\n---\n\n");
 };
 
-export async function createAgent(agentId: string, customSystemPrompt?: string) {
-    const cacheKey = `${agentId}:${customSystemPrompt || 'default'}`;
-    const cached = agentCache.get(cacheKey);
-
-    // Return cached agent if still valid
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return cached.chain;
-    }
-
-    const llm = getChatModel();
-
-    // Fetch agent's system prompt from DB if not provided
-    let systemPrompt = customSystemPrompt;
-    if (!systemPrompt) {
-        const agentData = await executeQuery<{ system_prompt: string }>(
-            `SELECT system_prompt FROM knowledge_base.agents WHERE agent_id = $1`,
-            [agentId]
-        );
-        systemPrompt = agentData[0]?.system_prompt || DEFAULT_SYSTEM_PROMPT;
-    }
-
-    const prompt = ChatPromptTemplate.fromMessages([
-        ["system", systemPrompt],
-        ["human", "CONTEXT:\n{context}\n\nCONTEXT REPEATED:\n{context}\n\nQuestion: {input}\n\nAnswer (Strictly based on Context):"],
-    ]);
-
-    const retrieveAndFormat = async (input: string): Promise<string> => {
-        // Use updated parameters: k=5, minSimilarity=0.3 (Lowered from 0.7 to capture docs)
-        const docs = await similaritySearch(input, agentId, 5, 0.3);
-        return formatDocs(docs);
-    };
-
-    const chain = RunnableSequence.from([
-        {
-            context: (input: { input: string }) => retrieveAndFormat(input.input),
-            input: (input: { input: string }) => input.input,
-        },
-        prompt,
-        llm,
-        new StringOutputParser(),
-    ]);
-
-    // Cache the agent
-    agentCache.set(cacheKey, { chain, timestamp: Date.now() });
-
-    return chain;
-}
-
 export async function queryAgent(
     agentId: string,
     query: string,
     options?: QueryOptions
 ): Promise<string> {
-    const agent = await createAgent(agentId, options?.systemPrompt);
-    const result = await agent.invoke({ input: query });
-    return result;
+    return withFallback(async (model) => {
+        // Fetch agent's system prompt from DB if not provided
+        let systemPrompt = options?.systemPrompt;
+        if (!systemPrompt) {
+            const agentData = await executeQuery<{ system_prompt: string }>(
+                `SELECT system_prompt FROM knowledge_base.agents WHERE agent_id = $1`,
+                [agentId]
+            );
+            systemPrompt = agentData[0]?.system_prompt || DEFAULT_SYSTEM_PROMPT;
+        }
+
+        const prompt = ChatPromptTemplate.fromMessages([
+            ["system", systemPrompt],
+            ["human", "CONTEXT:\n{context}\n\nCONTEXT REPEATED:\n{context}\n\nQuestion: {input}\n\nAnswer (Strictly based on Context):"],
+        ]);
+
+        const retrieveAndFormat = async (input: string): Promise<string> => {
+            const docs = await similaritySearch(input, agentId, 5, 0.3);
+            return formatDocs(docs);
+        };
+
+        const chain = RunnableSequence.from([
+            {
+                context: (input: { input: string }) => retrieveAndFormat(input.input),
+                input: (input: { input: string }) => input.input,
+            },
+            prompt,
+            model,
+            new StringOutputParser(),
+        ]);
+
+        return await chain.invoke({ input: query });
+    });
 }
 
 /**
@@ -116,7 +206,17 @@ export async function queryAgentWithTools(
     query: string,
     options?: QueryOptions & { toolContext?: ToolContext }
 ): Promise<string> {
-    const llm = getChatModel();
+    return withFallback(async (model) => {
+    return _queryAgentWithToolsImpl(model, agentId, query, options);
+    });
+}
+
+async function _queryAgentWithToolsImpl(
+    llm: BaseChatModel,
+    agentId: string,
+    query: string,
+    options?: QueryOptions & { toolContext?: ToolContext }
+): Promise<string> {
 
     // Fetch agent's system prompt from DB
     const agentData = await executeQuery<{ system_prompt: string }>(
@@ -212,7 +312,7 @@ Always use tools for real-time data. Your training data is for general informati
 
     // Use tools if available
     if (tools.length > 0) {
-        const llmWithTools = llm.bindTools(tools);
+        const llmWithTools = (llm as any).bindTools(tools);
         const chain = RunnableSequence.from([prompt, llmWithTools]);
         const result = await chain.invoke({});
 
@@ -332,7 +432,7 @@ export async function* streamQueryAgent(
     query: string,
     options?: QueryOptions & { toolContext?: ToolContext }
 ): AsyncGenerator<string, void, unknown> {
-    const llm = getChatModel();
+    const llm = getChatModel() as any;
 
     // Fetch agent's system prompt from DB
     const agentData = await executeQuery<{ system_prompt: string }>(
@@ -444,4 +544,9 @@ export function clearAgentCache(agentId?: string): void {
     } else {
         agentCache.clear();
     }
+}
+
+/** Returns the name of the currently active LLM provider */
+export function getCurrentProvider(): string {
+    return currentProvider;
 }

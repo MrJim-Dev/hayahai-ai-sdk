@@ -45,6 +45,8 @@ export {
   queryAgent,
   queryAgentWithTools,
   streamQueryAgent,
+  getCurrentProvider,
+  clearAgentCache,
 } from "./core/retrieval";
 
 // Tools
