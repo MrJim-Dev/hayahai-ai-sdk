@@ -2,7 +2,7 @@
 // HayahAI SDK — Server entry point
 // All server-side RAG/training/tools consolidated from knowledge-base-sdk
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.KnowledgeBaseClient = exports.createGetScheduleSummaryTool = exports.createGetPortInfoTool = exports.createCheckBookingStatusTool = exports.createEscalateToSupportTool = exports.createGetVehicleRatesTool = exports.createGetFareRatesTool = exports.createSearchTripsTool = exports.streamQueryAgent = exports.queryAgentWithTools = exports.queryAgent = exports.deleteAgent = exports.updateAgent = exports.deleteFile = exports.getAgentFiles = exports.listAgents = exports.getAgentStatus = exports.trainAgent = exports.createChatHandler = exports.getThreadMessages = exports.appendChatMessages = exports.appendChatMessage = exports.deleteFileFromS3 = exports.uploadFilesToContextFolder = exports.uploadFileToContextFolder = exports.uploadFilesToS3 = exports.uploadFileToS3 = exports.similaritySearch = exports.getEmbeddings = exports.getPool = exports.executeQuery = void 0;
+exports.KnowledgeBaseClient = exports.createGetScheduleSummaryTool = exports.createGetPortInfoTool = exports.createCheckBookingStatusTool = exports.createEscalateToSupportTool = exports.createGetVehicleRatesTool = exports.createGetFareRatesTool = exports.createSearchTripsTool = exports.clearAgentCache = exports.getCurrentProvider = exports.streamQueryAgent = exports.queryAgentWithTools = exports.queryAgent = exports.deleteAgent = exports.updateAgent = exports.deleteFile = exports.getAgentFiles = exports.listAgents = exports.getAgentStatus = exports.trainAgent = exports.createChatHandler = exports.getThreadMessages = exports.appendChatMessages = exports.appendChatMessage = exports.deleteFileFromS3 = exports.uploadFilesToContextFolder = exports.uploadFileToContextFolder = exports.uploadFilesToS3 = exports.uploadFileToS3 = exports.similaritySearch = exports.getEmbeddings = exports.getPool = exports.executeQuery = void 0;
 // Core DB
 var db_1 = require("./core/db");
 Object.defineProperty(exports, "executeQuery", { enumerable: true, get: function () { return db_1.executeQuery; } });
@@ -42,6 +42,8 @@ var retrieval_1 = require("./core/retrieval");
 Object.defineProperty(exports, "queryAgent", { enumerable: true, get: function () { return retrieval_1.queryAgent; } });
 Object.defineProperty(exports, "queryAgentWithTools", { enumerable: true, get: function () { return retrieval_1.queryAgentWithTools; } });
 Object.defineProperty(exports, "streamQueryAgent", { enumerable: true, get: function () { return retrieval_1.streamQueryAgent; } });
+Object.defineProperty(exports, "getCurrentProvider", { enumerable: true, get: function () { return retrieval_1.getCurrentProvider; } });
+Object.defineProperty(exports, "clearAgentCache", { enumerable: true, get: function () { return retrieval_1.clearAgentCache; } });
 // Tools
 var tools_1 = require("./core/tools");
 Object.defineProperty(exports, "createSearchTripsTool", { enumerable: true, get: function () { return tools_1.createSearchTripsTool; } });

@@ -1,11 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createAgent = createAgent;
 exports.queryAgent = queryAgent;
 exports.queryAgentWithTools = queryAgentWithTools;
 exports.streamQueryAgent = streamQueryAgent;
 exports.clearAgentCache = clearAgentCache;
+exports.getCurrentProvider = getCurrentProvider;
 const openai_1 = require("@langchain/openai");
+const groq_1 = require("@langchain/groq");
+const google_genai_1 = require("@langchain/google-genai");
 const output_parsers_1 = require("@langchain/core/output_parsers");
 const runnables_1 = require("@langchain/core/runnables");
 const prompts_1 = require("@langchain/core/prompts");
@@ -13,28 +15,125 @@ const vectorstore_1 = require("./vectorstore");
 const db_1 = require("./db");
 const tools_1 = require("./tools");
 let llm = null;
+let currentProvider = "none";
 // Agent cache for performance optimization
 const agentCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const providers = [
+    {
+        name: "openai",
+        create: () => {
+            const apiKey = process.env.OPENAI_API_KEY;
+            if (!apiKey)
+                return null;
+            return new openai_1.ChatOpenAI({
+                apiKey,
+                model: "gpt-4o",
+                temperature: 0.7,
+                streaming: true,
+                maxTokens: 1024,
+                maxRetries: 0,
+                timeout: 30000,
+                callbacks: [],
+            });
+        },
+    },
+    {
+        name: "groq",
+        create: () => {
+            const apiKey = process.env.GROQ_API_KEY;
+            if (!apiKey)
+                return null;
+            return new groq_1.ChatGroq({
+                apiKey,
+                model: "llama-3.3-70b-versatile",
+                temperature: 0.7,
+                maxTokens: 1024,
+                maxRetries: 0,
+            });
+        },
+    },
+    {
+        name: "gemini",
+        create: () => {
+            const apiKey = process.env.GOOGLE_GENAI_API_KEY;
+            if (!apiKey)
+                return null;
+            return new google_genai_1.ChatGoogleGenerativeAI({
+                apiKey,
+                model: "gemini-2.5-flash",
+                temperature: 0.7,
+                maxOutputTokens: 1024,
+            });
+        },
+    },
+];
+function isRateLimitError(error) {
+    const status = error?.response?.status || error?.status || error?.code;
+    const message = (error?.message || "").toLowerCase();
+    return (status === 429 ||
+        message.includes("rate limit") ||
+        message.includes("rate_limit") ||
+        message.includes("quota") ||
+        message.includes("too many requests") ||
+        message.includes("resource_exhausted"));
+}
 function getChatModel() {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-        throw new Error("OPENAI_API_KEY is not set");
+    if (llm)
+        return llm;
+    for (const provider of providers) {
+        const model = provider.create();
+        if (model) {
+            llm = model;
+            currentProvider = provider.name;
+            console.log(`[LLM] Using provider: ${provider.name}`);
+            return llm;
+        }
     }
-    if (!llm) {
-        llm = new openai_1.ChatOpenAI({
-            apiKey,
-            model: "gpt-4o",
-            temperature: 0.7,
-            streaming: true,
-            maxTokens: 1024,
-            maxRetries: 0, // Disable retries completely - no tiktoken!
-            timeout: 30000, // 30 second timeout
-            // Disable all callbacks that might trigger tiktoken
-            callbacks: [],
-        });
+    throw new Error("No AI provider configured. Set at least one of: OPENAI_API_KEY, GROQ_API_KEY, GOOGLE_GENAI_API_KEY");
+}
+/**
+ * Execute an LLM call with automatic fallback on rate limit errors.
+ * Tries the current provider first, then falls through to the next available provider.
+ */
+async function withFallback(fn) {
+    const startIdx = providers.findIndex(p => p.name === currentProvider);
+    for (let i = 0; i < providers.length; i++) {
+        const idx = (startIdx + i) % providers.length;
+        const provider = providers[idx];
+        // Skip if this isn't the current provider and we haven't failed yet
+        if (i === 0) {
+            try {
+                return await fn(getChatModel());
+            }
+            catch (error) {
+                if (!isRateLimitError(error))
+                    throw error;
+                console.warn(`[LLM] Rate limited by ${currentProvider}, trying next provider...`);
+                // Clear cached model so we try the next one
+                llm = null;
+                agentCache.clear();
+            }
+        }
+        else {
+            const model = provider.create();
+            if (!model)
+                continue;
+            try {
+                llm = model;
+                currentProvider = provider.name;
+                console.log(`[LLM] Falling back to: ${provider.name}`);
+                return await fn(model);
+            }
+            catch (error) {
+                if (!isRateLimitError(error))
+                    throw error;
+                console.warn(`[LLM] Rate limited by ${provider.name} too, trying next...`);
+                llm = null;
+            }
+        }
     }
-    return llm;
+    throw new Error("All AI providers are rate limited. Please try again later.");
 }
 const DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant trained on specific documents.
 Answer questions based on the provided context. If information is not in the context, say so.
@@ -45,52 +144,43 @@ const formatDocs = (docs) => {
         .map((d, i) => `[Source ${i + 1}: ${d.metadata?.source || "Unknown"}]\n${d.pageContent}`)
         .join("\n\n---\n\n");
 };
-async function createAgent(agentId, customSystemPrompt) {
-    const cacheKey = `${agentId}:${customSystemPrompt || 'default'}`;
-    const cached = agentCache.get(cacheKey);
-    // Return cached agent if still valid
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return cached.chain;
-    }
-    const llm = getChatModel();
-    // Fetch agent's system prompt from DB if not provided
-    let systemPrompt = customSystemPrompt;
-    if (!systemPrompt) {
-        const agentData = await (0, db_1.executeQuery)(`SELECT system_prompt FROM knowledge_base.agents WHERE agent_id = $1`, [agentId]);
-        systemPrompt = agentData[0]?.system_prompt || DEFAULT_SYSTEM_PROMPT;
-    }
-    const prompt = prompts_1.ChatPromptTemplate.fromMessages([
-        ["system", systemPrompt],
-        ["human", "CONTEXT:\n{context}\n\nCONTEXT REPEATED:\n{context}\n\nQuestion: {input}\n\nAnswer (Strictly based on Context):"],
-    ]);
-    const retrieveAndFormat = async (input) => {
-        // Use updated parameters: k=5, minSimilarity=0.3 (Lowered from 0.7 to capture docs)
-        const docs = await (0, vectorstore_1.similaritySearch)(input, agentId, 5, 0.3);
-        return formatDocs(docs);
-    };
-    const chain = runnables_1.RunnableSequence.from([
-        {
-            context: (input) => retrieveAndFormat(input.input),
-            input: (input) => input.input,
-        },
-        prompt,
-        llm,
-        new output_parsers_1.StringOutputParser(),
-    ]);
-    // Cache the agent
-    agentCache.set(cacheKey, { chain, timestamp: Date.now() });
-    return chain;
-}
 async function queryAgent(agentId, query, options) {
-    const agent = await createAgent(agentId, options?.systemPrompt);
-    const result = await agent.invoke({ input: query });
-    return result;
+    return withFallback(async (model) => {
+        // Fetch agent's system prompt from DB if not provided
+        let systemPrompt = options?.systemPrompt;
+        if (!systemPrompt) {
+            const agentData = await (0, db_1.executeQuery)(`SELECT system_prompt FROM knowledge_base.agents WHERE agent_id = $1`, [agentId]);
+            systemPrompt = agentData[0]?.system_prompt || DEFAULT_SYSTEM_PROMPT;
+        }
+        const prompt = prompts_1.ChatPromptTemplate.fromMessages([
+            ["system", systemPrompt],
+            ["human", "CONTEXT:\n{context}\n\nCONTEXT REPEATED:\n{context}\n\nQuestion: {input}\n\nAnswer (Strictly based on Context):"],
+        ]);
+        const retrieveAndFormat = async (input) => {
+            const docs = await (0, vectorstore_1.similaritySearch)(input, agentId, 5, 0.3);
+            return formatDocs(docs);
+        };
+        const chain = runnables_1.RunnableSequence.from([
+            {
+                context: (input) => retrieveAndFormat(input.input),
+                input: (input) => input.input,
+            },
+            prompt,
+            model,
+            new output_parsers_1.StringOutputParser(),
+        ]);
+        return await chain.invoke({ input: query });
+    });
 }
 /**
  * Query agent with tool calling support (non-streaming)
  */
 async function queryAgentWithTools(agentId, query, options) {
-    const llm = getChatModel();
+    return withFallback(async (model) => {
+        return _queryAgentWithToolsImpl(model, agentId, query, options);
+    });
+}
+async function _queryAgentWithToolsImpl(llm, agentId, query, options) {
     // Fetch agent's system prompt from DB
     const agentData = await (0, db_1.executeQuery)(`SELECT system_prompt FROM knowledge_base.agents WHERE agent_id = $1`, [agentId]);
     let systemPrompt = options?.systemPrompt || agentData[0]?.system_prompt || DEFAULT_SYSTEM_PROMPT;
@@ -379,5 +469,9 @@ function clearAgentCache(agentId) {
     else {
         agentCache.clear();
     }
+}
+/** Returns the name of the currently active LLM provider */
+function getCurrentProvider() {
+    return currentProvider;
 }
 //# sourceMappingURL=retrieval.js.map

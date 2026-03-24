@@ -305,16 +305,47 @@ function createEscalateToSupportTool(context) {
                 if (!res.ok)
                     throw new Error(`Support API error: ${res.status}`);
                 const data = await res.json();
+                // Fetch tenant contact info for the response
+                let contactInfo = [];
+                try {
+                    const contactRes = await fetch(`${apiBase}/contact-information`);
+                    if (contactRes.ok) {
+                        const contactData = await contactRes.json();
+                        contactInfo = (contactData.data || []).map((c) => ({
+                            type: c.type,
+                            label: c.label,
+                            value: c.value,
+                        }));
+                    }
+                }
+                catch { /* contact info is optional */ }
                 return JSON.stringify({
                     success: true,
                     ticket_id: data.data?.id,
                     message: "Support ticket created. A customer service representative will reach out soon.",
+                    contact_info: contactInfo,
                 });
             }
             catch (error) {
+                // Fetch contact info even on ticket creation failure
+                let contactInfo = [];
+                try {
+                    const apiBase = process.env.API_BASE_URL || "http://localhost:3000";
+                    const contactRes = await fetch(`${apiBase}/contact-information`);
+                    if (contactRes.ok) {
+                        const contactData = await contactRes.json();
+                        contactInfo = (contactData.data || []).map((c) => ({
+                            type: c.type,
+                            label: c.label,
+                            value: c.value,
+                        }));
+                    }
+                }
+                catch { /* best effort */ }
                 return JSON.stringify({
                     success: false,
                     message: "I apologize for the inconvenience. Please contact our support team directly.",
+                    contact_info: contactInfo,
                     error: error.message,
                 });
             }

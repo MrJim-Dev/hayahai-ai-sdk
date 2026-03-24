@@ -5,7 +5,7 @@ export { uploadFileToS3, uploadFilesToS3, uploadFileToContextFolder, uploadFiles
 export { appendChatMessage, appendChatMessages, getThreadMessages, } from "./core/chatMemory";
 export { createChatHandler } from "./core/chat";
 export { trainAgent, getAgentStatus, listAgents, getAgentFiles, deleteFile, updateAgent, deleteAgent, } from "./core/training";
-export { queryAgent, queryAgentWithTools, streamQueryAgent, } from "./core/retrieval";
+export { queryAgent, queryAgentWithTools, streamQueryAgent, getCurrentProvider, clearAgentCache, } from "./core/retrieval";
 export { createSearchTripsTool, createGetFareRatesTool, createGetVehicleRatesTool, createEscalateToSupportTool, createCheckBookingStatusTool, createGetPortInfoTool, createGetScheduleSummaryTool, } from "./core/tools";
 export type { ToolContext } from "./core/tools";
 export { KnowledgeBaseClient } from "./client/KnowledgeBaseClient";
