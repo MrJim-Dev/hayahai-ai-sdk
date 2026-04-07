@@ -32,6 +32,9 @@ type PortInfo = { code: string; name: string; id: number };
 const TEST_INDICATORS = [
   "test", "fake", "sample", "demo", "xxx", "asdf", "qwerty",
   "heaven", "hell", "neverland", "hogwarts",
+  "example", "1port", "2port", "anti lock",
+  "kyoto", "tokyo", "osaka", "paris", "london",
+  "arnel", "judiel", "ceven", "juds", "james",
 ];
 const isRealPort = (name: string) =>
   !TEST_INDICATORS.some((t) => name.toLowerCase().includes(t));
@@ -568,11 +571,10 @@ export default function TripSearchWidget({
                       return (
                         <div style={{
                           marginTop: 10,
-                          display: useGrid ? "grid" : "flex",
-                          ...(useGrid
-                            ? { gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 6 }
-                            : { flexWrap: "wrap" as const, gap: 8 }),
-                          maxHeight: useGrid ? 180 : undefined,
+                          display: "flex",
+                          flexWrap: "wrap" as const,
+                          gap: useGrid ? 6 : 8,
+                          maxHeight: useGrid ? 240 : undefined,
                           overflowY: useGrid ? "auto" as const : undefined,
                           paddingRight: useGrid ? 4 : undefined,
                         }}>
@@ -742,13 +744,14 @@ function buildStyles(t: HayahAITheme) {
       boxShadow: "0 1px 3px rgba(0,0,0,.04)",
     },
     portChip: {
-      padding: "7px 10px", borderRadius: 10,
+      padding: "9px 14px", borderRadius: 10,
       border: `1.5px solid ${t.colors.quickReplyBorder}`,
       background: t.colors.quickReplyBg, color: t.colors.quickReplyText,
-      fontSize: "11px", fontWeight: 500, cursor: "pointer",
+      fontSize: "12px", fontWeight: 500, cursor: "pointer",
       transition: "all .2s ease", fontFamily: "inherit",
-      textAlign: "center" as const, whiteSpace: "nowrap" as const,
-      overflow: "hidden", textOverflow: "ellipsis",
+      textAlign: "left" as const, whiteSpace: "normal" as const,
+      flex: "1 1 calc(50% - 3px)", minWidth: "160px",
+      lineHeight: 1.3,
     },
     tripCard: {
       background: "#fff", borderRadius: 14,

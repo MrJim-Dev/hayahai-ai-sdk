@@ -22,6 +22,9 @@ function injectKeyframes() {
 const TEST_INDICATORS = [
     "test", "fake", "sample", "demo", "xxx", "asdf", "qwerty",
     "heaven", "hell", "neverland", "hogwarts",
+    "example", "1port", "2port", "anti lock",
+    "kyoto", "tokyo", "osaka", "paris", "london",
+    "arnel", "judiel", "ceven", "juds", "james",
 ];
 const isRealPort = (name) => !TEST_INDICATORS.some((t) => name.toLowerCase().includes(t));
 const getUniqueOriginPorts = (routes) => {
@@ -468,11 +471,10 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
                                                 const useGrid = isPortGrid(opts);
                                                 return ((0, jsx_runtime_1.jsx)("div", { style: {
                                                         marginTop: 10,
-                                                        display: useGrid ? "grid" : "flex",
-                                                        ...(useGrid
-                                                            ? { gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 6 }
-                                                            : { flexWrap: "wrap", gap: 8 }),
-                                                        maxHeight: useGrid ? 180 : undefined,
+                                                        display: "flex",
+                                                        flexWrap: "wrap",
+                                                        gap: useGrid ? 6 : 8,
+                                                        maxHeight: useGrid ? 240 : undefined,
                                                         overflowY: useGrid ? "auto" : undefined,
                                                         paddingRight: useGrid ? 4 : undefined,
                                                     }, children: opts.map((opt) => ((0, jsx_runtime_1.jsx)("button", { onClick: () => handleQuickReply(opt.value, opt.label), style: useGrid ? s.portChip : s.quickReply, children: opt.label }, opt.value))) }));
@@ -564,13 +566,14 @@ function buildStyles(t) {
             boxShadow: "0 1px 3px rgba(0,0,0,.04)",
         },
         portChip: {
-            padding: "7px 10px", borderRadius: 10,
+            padding: "9px 14px", borderRadius: 10,
             border: `1.5px solid ${t.colors.quickReplyBorder}`,
             background: t.colors.quickReplyBg, color: t.colors.quickReplyText,
-            fontSize: "11px", fontWeight: 500, cursor: "pointer",
+            fontSize: "12px", fontWeight: 500, cursor: "pointer",
             transition: "all .2s ease", fontFamily: "inherit",
-            textAlign: "center", whiteSpace: "nowrap",
-            overflow: "hidden", textOverflow: "ellipsis",
+            textAlign: "left", whiteSpace: "normal",
+            flex: "1 1 calc(50% - 3px)", minWidth: "160px",
+            lineHeight: 1.3,
         },
         tripCard: {
             background: "#fff", borderRadius: 14,
