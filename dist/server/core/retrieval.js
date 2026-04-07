@@ -7,6 +7,7 @@ exports.clearAgentCache = clearAgentCache;
 exports.getCurrentProvider = getCurrentProvider;
 const openai_1 = require("@langchain/openai");
 const groq_1 = require("@langchain/groq");
+const mistralai_1 = require("@langchain/mistralai");
 const google_genai_1 = require("@langchain/google-genai");
 const output_parsers_1 = require("@langchain/core/output_parsers");
 const runnables_1 = require("@langchain/core/runnables");
@@ -54,6 +55,21 @@ const providers = [
         },
     },
     {
+        name: "mistral",
+        create: () => {
+            const apiKey = process.env.MISTRAL_API_KEY;
+            if (!apiKey)
+                return null;
+            return new mistralai_1.ChatMistralAI({
+                apiKey,
+                model: "mistral-large-latest",
+                temperature: 0.7,
+                maxTokens: 1024,
+                maxRetries: 0,
+            });
+        },
+    },
+    {
         name: "gemini",
         create: () => {
             const apiKey = process.env.GOOGLE_GENAI_API_KEY;
@@ -90,7 +106,7 @@ function getChatModel() {
             return llm;
         }
     }
-    throw new Error("No AI provider configured. Set at least one of: OPENAI_API_KEY, GROQ_API_KEY, GOOGLE_GENAI_API_KEY");
+    throw new Error("No AI provider configured. Set at least one of: OPENAI_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY, GOOGLE_GENAI_API_KEY");
 }
 /**
  * Execute an LLM call with automatic fallback on rate limit errors.

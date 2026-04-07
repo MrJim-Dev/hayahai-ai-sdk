@@ -1,5 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatGroq } from "@langchain/groq";
+import { ChatMistralAI } from "@langchain/mistralai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { StringOutputParser } from "@langchain/core/output_parsers";
@@ -19,7 +20,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Provider configuration for the fallback chain.
- * Order: OpenAI (primary) → Groq (fast, free) → Gemini (generous free tier)
+ * Order: OpenAI (primary) → Groq (fast, free) → Mistral → Gemini (generous free tier)
  */
 interface ProviderConfig {
     name: string;
@@ -52,6 +53,20 @@ const providers: ProviderConfig[] = [
             return new ChatGroq({
                 apiKey,
                 model: "llama-3.3-70b-versatile",
+                temperature: 0.7,
+                maxTokens: 1024,
+                maxRetries: 0,
+            });
+        },
+    },
+    {
+        name: "mistral",
+        create: () => {
+            const apiKey = process.env.MISTRAL_API_KEY;
+            if (!apiKey) return null;
+            return new ChatMistralAI({
+                apiKey,
+                model: "mistral-large-latest",
                 temperature: 0.7,
                 maxTokens: 1024,
                 maxRetries: 0,
@@ -99,7 +114,7 @@ function getChatModel(): BaseChatModel {
         }
     }
 
-    throw new Error("No AI provider configured. Set at least one of: OPENAI_API_KEY, GROQ_API_KEY, GOOGLE_GENAI_API_KEY");
+    throw new Error("No AI provider configured. Set at least one of: OPENAI_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY, GOOGLE_GENAI_API_KEY");
 }
 
 /**
