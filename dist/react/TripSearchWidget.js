@@ -360,7 +360,7 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
             if (available.length > 0) {
                 available.sort((a, b) => a.name.localeCompare(b.name));
                 addMsg("assistant", `Traveling from **${name}** 📍\n\nWhere would you like to go?`, {
-                    interactive: { type: "quick_reply", data: { options: available.map((p) => ({ label: `🏝️ ${p.name}`, value: `dest:${p.code}:${p.name}:${p.id}` })) } },
+                    interactive: { type: "quick_reply", data: { options: available.map((p) => ({ label: `🛳️ ${name} → ${p.name}`, value: `dest:${p.code}:${p.name}:${p.id}` })) } },
                 });
             }
             else {
@@ -592,7 +592,7 @@ function buildStyles(t) {
             fontSize: "12px", fontWeight: 500, cursor: "pointer",
             transition: "all .2s ease", fontFamily: "inherit",
             textAlign: "left", whiteSpace: "normal",
-            flex: "1 1 calc(50% - 3px)", minWidth: "160px",
+            flex: "1 1 calc(33.333% - 4px)", minWidth: "130px",
             lineHeight: 1.3,
         },
         tripCard: {
