@@ -98,13 +98,12 @@ export default function TripSearchWidget({
   const [context, setContext] = useState<BookingContext>({});
   const [routes, setRoutes] = useState<RouteData[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [step, setStep] = useState<"origin" | "destination" | "passengers" | "vehicles" | "date" | "complete">("origin");
+  const [step, setStep] = useState<"route" | "passengers" | "vehicles" | "date" | "complete">("route");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingRouteRef = useRef<RouteData | null>(null);
   const initAttempted = useRef(false);
-  const noTripOriginsRef = useRef<Set<string>>(new Set());
 
   // ── Config ──────────────────────────────────────────────────────────────
   const [config, setConfig] = useState<AgentConfig | null>(propConfig ?? null);
@@ -142,10 +141,28 @@ export default function TripSearchWidget({
     })();
   }, [routesApiUrl, tenantId]);
 
-  const buildOriginOptions = (): QuickReplyOption[] =>
-    getUniqueOriginPorts(routes)
-      .filter((p) => !noTripOriginsRef.current.has(p.code))
-      .map((p) => ({ label: `📍 ${p.name}`, value: `origin:${p.code}:${p.name}:${p.id}` }));
+  const ROUTE_PREVIEW_COUNT = 6;
+
+  const buildRouteOptions = (showAll = false): QuickReplyOption[] => {
+    const seen = new Set<string>();
+    const opts: QuickReplyOption[] = [];
+    for (const r of routes) {
+      if (!isRealPort(r.src_port_name) || !isRealPort(r.dest_port_name)) continue;
+      const key = `${r.src_port_code}:${r.dest_port_code}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      opts.push({
+        label: `🛳️ ${r.src_port_name} → ${r.dest_port_name}`,
+        value: `route:${r.src_port_code}:${r.dest_port_code}`,
+      });
+    }
+    opts.sort((a, b) => a.label.localeCompare(b.label));
+    if (!showAll && opts.length > ROUTE_PREVIEW_COUNT) {
+      const remaining = opts.length - ROUTE_PREVIEW_COUNT;
+      return [...opts.slice(0, ROUTE_PREVIEW_COUNT), { label: `➕ See ${remaining} more route${remaining > 1 ? "s" : ""}`, value: "show_more_routes" }];
+    }
+    return opts;
+  };
 
   // ── Init message ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -153,8 +170,8 @@ export default function TripSearchWidget({
     initAttempted.current = true;
     setMessages([{
       id: crypto.randomUUID(), role: "assistant",
-      content: `${welcomeMsg}\n\nWhere are you traveling from?`,
-      interactive: { type: "quick_reply", data: { options: buildOriginOptions() } },
+      content: `${welcomeMsg}\n\nWhere would you like to travel?`,
+      interactive: { type: "quick_reply", data: { options: buildRouteOptions() } },
     }]);
   }, [routes, messages.length, welcomeMsg]);
 
@@ -317,57 +334,45 @@ export default function TripSearchWidget({
 
   // ── Quick reply handler ─────────────────────────────────────────────────
   const handleQuickReply = async (value: string, label: string) => {
+    if (value === "show_more_routes") {
+      setMessages((prev) => {
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].role === "assistant" && updated[i].interactive) {
+            updated[i] = { ...updated[i], interactive: { type: "quick_reply", data: { options: buildRouteOptions(true) } } };
+            break;
+          }
+        }
+        return updated;
+      });
+      return;
+    }
+
     if (value === "start over" || value.toLowerCase().includes("start over")) {
-      setContext({}); setMessages([]); setStep("origin"); pendingRouteRef.current = null; initAttempted.current = false; return;
+      setContext({}); setMessages([]); setStep("route"); pendingRouteRef.current = null; initAttempted.current = false; return;
     }
     clearInteractive();
 
-    if (value === "choose_origin") {
-      addMsg("user", "Choose another port");
-      addMsg("assistant", "Where are you traveling from?", { interactive: { type: "quick_reply", data: { options: buildOriginOptions() } } });
+    if (value === "choose_origin" || value === "choose_route") {
+      addMsg("user", "Choose another route");
+      addMsg("assistant", "Where would you like to travel?", { interactive: { type: "quick_reply", data: { options: buildRouteOptions() } } });
       return;
     }
 
-    if (value.startsWith("origin:")) {
-      const [, code, name, idStr] = value.split(":");
-      const id = parseInt(idStr, 10);
-      setContext((prev) => ({ ...prev, originPort: { code, name, id } }));
-      addMsg("user", `From ${name}`);
-      setIsSearching(true);
-
-      const destinations = getDestinationsForOrigin(routes, code);
-      const available: PortInfo[] = [];
-      await Promise.all(destinations.map(async (dest) => {
-        try {
-          const res = await fetch(`${tripsApiUrl}/available-dates?origin_code=${code}&destination_code=${dest.code}&limit=1`);
-          if (res.ok) { const d = await res.json(); if (d.data?.length) available.push(dest); }
-        } catch { /* skip */ }
+    if (value.startsWith("route:")) {
+      const [, srcCode, destCode] = value.split(":");
+      const route = findRouteByPorts(routes, srcCode, destCode);
+      if (!route) return;
+      pendingRouteRef.current = route;
+      setContext((prev) => ({
+        ...prev,
+        originPort: { code: route.src_port_code, name: route.src_port_name, id: route.src_port_id },
+        destinationPort: { code: route.dest_port_code, name: route.dest_port_name, id: route.dest_port_id },
+        selectedRoute: route,
       }));
-      setIsSearching(false);
-
-      if (available.length > 0) {
-        available.sort((a, b) => a.name.localeCompare(b.name));
-        addMsg("assistant", `Traveling from **${name}** 📍\n\nWhere would you like to go?`, {
-          interactive: { type: "quick_reply", data: { options: available.map((p) => ({ label: `🏝️ ${p.name}`, value: `dest:${p.code}:${p.name}:${p.id}` })) } },
-        });
-      } else {
-        noTripOriginsRef.current.add(code);
-        addMsg("assistant", `No upcoming trips from **${name}**. Try another port?`, {
-          interactive: { type: "quick_reply", data: { options: [{ label: "📍 Choose another port", value: "choose_origin" }] } },
-        });
-      }
-      setStep("destination");
-      return;
-    }
-
-    if (value.startsWith("dest:")) {
-      const [, code, name, idStr] = value.split(":");
-      const id = parseInt(idStr);
-      const route = findRouteByPorts(routes, context.originPort?.code || "", code);
-      if (route) { pendingRouteRef.current = route; setContext((prev) => ({ ...prev, destinationPort: { code, name, id }, selectedRoute: route })); }
+      addMsg("user", `${route.src_port_name} → ${route.dest_port_name}`);
       const opts = [1,2,3,4,5,6,7,8,9,10].map((n) => ({ label: `👤 ${n} passenger${n > 1 ? "s" : ""}`, value: `passengers:${n}` }));
-      addMsg("user", `To ${name}`);
-      addMsg("assistant", `${context.originPort?.name} → **${name}** 🛳️\n\nHow many passengers?`, { interactive: { type: "quick_reply", data: { options: opts } } });
+      addMsg("assistant", `**${route.src_port_name} → ${route.dest_port_name}** 🛳️\n\nHow many passengers?`, { interactive: { type: "quick_reply", data: { options: opts } } });
       setStep("passengers");
       return;
     }
@@ -459,7 +464,7 @@ export default function TripSearchWidget({
   const s = buildStyles(t);
 
   // Determine if quick replies are port-selection (many items → use grid)
-  const isPortGrid = (opts: QuickReplyOption[]) => opts.length > 6 && opts.every((o) => o.value.startsWith("origin:") || o.value.startsWith("dest:"));
+  const isPortGrid = (opts: QuickReplyOption[]) => opts.length > 4 && opts.some((o) => o.value.startsWith("route:") || o.value.startsWith("origin:") || o.value.startsWith("dest:"));
 
   const renderContent = (text: string) =>
     text.split(/(\*\*.*?\*\*)/).map((part, i) =>
