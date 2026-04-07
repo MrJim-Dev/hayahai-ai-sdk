@@ -284,7 +284,7 @@ export default function TripSearchWidget({
         // Fetch available dates
         let dateOpts: QuickReplyOption[] = [{ label: "🔄 Different route", value: "start over" }];
         try {
-          const dRes = await fetch(`${tripsApiUrl}/available-dates?origin_code=${route.src_port_code}&destination_code=${route.dest_port_code}&limit=5`);
+          const dRes = await fetch(`${tripsApiUrl}/available-dates?origin_code=${route.src_port_code}&destination_code=${route.dest_port_code}&limit=5&vehicle_count=${context.vehicleCount ?? 0}`);
           if (dRes.ok) {
             const dd = await dRes.json();
             if (dd.data?.length) {
@@ -438,7 +438,7 @@ export default function TripSearchWidget({
       if (route) {
         setIsSearching(true);
         try {
-          const dRes = await fetch(`${tripsApiUrl}/available-dates?origin_code=${route.src_port_code}&destination_code=${route.dest_port_code}&limit=7`);
+          const dRes = await fetch(`${tripsApiUrl}/available-dates?origin_code=${route.src_port_code}&destination_code=${route.dest_port_code}&limit=7&vehicle_count=${v}`);
           let dateOpts: QuickReplyOption[] = [];
           if (dRes.ok) {
             const dd = await dRes.json();
