@@ -69,6 +69,7 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
     const [isSearching, setIsSearching] = (0, react_1.useState)(false);
     const [context, setContext] = (0, react_1.useState)({});
     const [routes, setRoutes] = (0, react_1.useState)([]);
+    const [availableRoutePairs, setAvailableRoutePairs] = (0, react_1.useState)(undefined);
     const [showDatePicker, setShowDatePicker] = (0, react_1.useState)(false);
     const [step, setStep] = (0, react_1.useState)("route");
     const scrollRef = (0, react_1.useRef)(null);
@@ -112,6 +113,38 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
             catch { /* silent */ }
         })();
     }, [routesApiUrl, tenantId]);
+    // ── Route availability check ─────────────────────────────────────────
+    (0, react_1.useEffect)(() => {
+        if (routes.length === 0)
+            return;
+        const seen = new Set();
+        const toCheck = [];
+        for (const r of routes) {
+            if (!isRealPort(r.src_port_name) || !isRealPort(r.dest_port_name))
+                continue;
+            const key = `${r.src_port_code}:${r.dest_port_code}`;
+            if (seen.has(key))
+                continue;
+            seen.add(key);
+            toCheck.push(r);
+        }
+        (async () => {
+            const available = new Set();
+            await Promise.allSettled(toCheck.map(async (r) => {
+                try {
+                    const res = await fetch(`${tripsApiUrl}/available-dates?origin_code=${r.src_port_code}&destination_code=${r.dest_port_code}&limit=1`);
+                    if (res.ok) {
+                        const d = await res.json();
+                        if (d.data?.length)
+                            available.add(`${r.src_port_code}:${r.dest_port_code}`);
+                    }
+                }
+                catch { /* skip */ }
+            }));
+            // If all checks failed (network error), fall back to showing all routes
+            setAvailableRoutePairs(available.size > 0 ? available : null);
+        })();
+    }, [routes, tripsApiUrl]);
     const ROUTE_PREVIEW_COUNT = 6;
     const buildRouteOptions = (showAll = false) => {
         const seen = new Set();
@@ -121,6 +154,9 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
                 continue;
             const key = `${r.src_port_code}:${r.dest_port_code}`;
             if (seen.has(key))
+                continue;
+            // Skip routes with no upcoming trips (if availability data is loaded)
+            if (availableRoutePairs != null && !availableRoutePairs.has(key))
                 continue;
             seen.add(key);
             opts.push({
@@ -139,13 +175,16 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
     (0, react_1.useEffect)(() => {
         if (routes.length === 0 || messages.length > 0 || initAttempted.current)
             return;
+        // Wait for availability check before showing route chips
+        if (availableRoutePairs === undefined)
+            return;
         initAttempted.current = true;
         setMessages([{
                 id: crypto.randomUUID(), role: "assistant",
                 content: `${welcomeMsg}\n\nWhere would you like to travel?`,
                 interactive: { type: "quick_reply", data: { options: buildRouteOptions() } },
             }]);
-    }, [routes, messages.length, welcomeMsg]);
+    }, [routes, messages.length, welcomeMsg, availableRoutePairs]);
     // ── Auto-scroll ─────────────────────────────────────────────────────────
     (0, react_1.useEffect)(() => {
         if (scrollRef.current)

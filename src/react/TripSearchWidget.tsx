@@ -100,6 +100,7 @@ export default function TripSearchWidget({
   const [isSearching, setIsSearching] = useState(false);
   const [context, setContext] = useState<BookingContext>({});
   const [routes, setRoutes] = useState<RouteData[]>([]);
+  const [availableRoutePairs, setAvailableRoutePairs] = useState<Set<string> | null | undefined>(undefined);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [step, setStep] = useState<"route" | "passengers" | "vehicles" | "date" | "complete">("route");
 
@@ -144,6 +145,34 @@ export default function TripSearchWidget({
     })();
   }, [routesApiUrl, tenantId]);
 
+  // ── Route availability check ─────────────────────────────────────────
+  useEffect(() => {
+    if (routes.length === 0) return;
+    const seen = new Set<string>();
+    const toCheck: RouteData[] = [];
+    for (const r of routes) {
+      if (!isRealPort(r.src_port_name) || !isRealPort(r.dest_port_name)) continue;
+      const key = `${r.src_port_code}:${r.dest_port_code}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      toCheck.push(r);
+    }
+    (async () => {
+      const available = new Set<string>();
+      await Promise.allSettled(toCheck.map(async (r) => {
+        try {
+          const res = await fetch(`${tripsApiUrl}/available-dates?origin_code=${r.src_port_code}&destination_code=${r.dest_port_code}&limit=1`);
+          if (res.ok) {
+            const d = await res.json();
+            if (d.data?.length) available.add(`${r.src_port_code}:${r.dest_port_code}`);
+          }
+        } catch { /* skip */ }
+      }));
+      // If all checks failed (network error), fall back to showing all routes
+      setAvailableRoutePairs(available.size > 0 ? available : null);
+    })();
+  }, [routes, tripsApiUrl]);
+
   const ROUTE_PREVIEW_COUNT = 6;
 
   const buildRouteOptions = (showAll = false): QuickReplyOption[] => {
@@ -153,6 +182,8 @@ export default function TripSearchWidget({
       if (!isRealPort(r.src_port_name) || !isRealPort(r.dest_port_name)) continue;
       const key = `${r.src_port_code}:${r.dest_port_code}`;
       if (seen.has(key)) continue;
+      // Skip routes with no upcoming trips (if availability data is loaded)
+      if (availableRoutePairs != null && !availableRoutePairs.has(key)) continue;
       seen.add(key);
       opts.push({
         label: `🛳️ ${r.src_port_name} → ${r.dest_port_name}`,
@@ -170,13 +201,15 @@ export default function TripSearchWidget({
   // ── Init message ────────────────────────────────────────────────────────
   useEffect(() => {
     if (routes.length === 0 || messages.length > 0 || initAttempted.current) return;
+    // Wait for availability check before showing route chips
+    if (availableRoutePairs === undefined) return;
     initAttempted.current = true;
     setMessages([{
       id: crypto.randomUUID(), role: "assistant",
       content: `${welcomeMsg}\n\nWhere would you like to travel?`,
       interactive: { type: "quick_reply", data: { options: buildRouteOptions() } },
     }]);
-  }, [routes, messages.length, welcomeMsg]);
+  }, [routes, messages.length, welcomeMsg, availableRoutePairs]);
 
   // ── Auto-scroll ─────────────────────────────────────────────────────────
   useEffect(() => {
