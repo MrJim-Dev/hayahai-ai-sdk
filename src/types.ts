@@ -91,6 +91,10 @@ export interface TripData {
   price: number;
   availableSeats: number;
   tripDate?: string;
+  /** Booking context — populated by the widget so consumers don't need to track state */
+  passengerCount?: number;
+  vehicleCount?: number;
+  departureDateLocal?: string; // YYYY-MM-DD in local/PH time, avoids UTC day shift
 }
 
 export interface RouteData {

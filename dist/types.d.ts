@@ -77,6 +77,10 @@ export interface TripData {
     price: number;
     availableSeats: number;
     tripDate?: string;
+    /** Booking context — populated by the widget so consumers don't need to track state */
+    passengerCount?: number;
+    vehicleCount?: number;
+    departureDateLocal?: string;
 }
 export interface RouteData {
     id: number;

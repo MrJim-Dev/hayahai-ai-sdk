@@ -239,6 +239,11 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
                     const total = Object.values(cabinCaps).reduce((sum, c) => sum + (c.remaining ?? 0), 0);
                     return total > 0 ? Math.min(min, total) : min;
                 }, Infinity);
+                // Departure date in local time — avoid UTC shift (e.g. 6AM PHT = prev day UTC)
+                const rawDep = t.total_departure_time || t.scheduled_departure || "";
+                const departureDateLocal = rawDep
+                    ? new Date(rawDep).toLocaleDateString("en-CA") // YYYY-MM-DD local
+                    : depDate;
                 return {
                     id: t.id?.toString() || crypto.randomUUID(),
                     shippingLine: ship, vesselName: ship,
@@ -249,6 +254,9 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
                     duration: t.total_duration_minutes ? `${Math.floor(t.total_duration_minutes / 60)}h ${t.total_duration_minutes % 60}m` : "",
                     price,
                     availableSeats: isFinite(availableSeats) ? availableSeats : 0,
+                    departureDateLocal,
+                    passengerCount: context.passengerCount ?? 1,
+                    vehicleCount: context.vehicleCount ?? 0,
                 };
             });
             if (trips.length > 0) {
