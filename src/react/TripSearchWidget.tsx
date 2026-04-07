@@ -257,6 +257,16 @@ export default function TripSearchWidget({
       const trips: TripData[] = tripsArr.map((t: any) => {
         const seg = t.segments?.[0];
         const ship = seg?.ship_name || t.ship_name || "Unknown";
+        // Price: use base_fare (adult ECO rate) from first segment
+        const price = seg?.base_fare
+          ?? seg?.passenger_rates?.find((r: any) => r.passenger_type_code === "ADULT")?.amount
+          ?? 0;
+        // Seats: sum remaining from cabin_capacities across all segments (bottleneck)
+        const availableSeats = (t.segments ?? [seg]).reduce((min: number, s: any) => {
+          const cabinCaps: Record<string, { remaining: number }> = s?.cabin_capacities ?? {};
+          const total = Object.values(cabinCaps).reduce((sum, c) => sum + (c.remaining ?? 0), 0);
+          return total > 0 ? Math.min(min, total) : min;
+        }, Infinity);
         return {
           id: t.id?.toString() || crypto.randomUUID(),
           shippingLine: ship, vesselName: ship,
@@ -265,8 +275,8 @@ export default function TripSearchWidget({
           departureTime: t.total_departure_time || t.scheduled_departure,
           arrivalTime: t.total_arrival_time || t.scheduled_arrival || "",
           duration: t.total_duration_minutes ? `${Math.floor(t.total_duration_minutes / 60)}h ${t.total_duration_minutes % 60}m` : "",
-          price: seg?.fare || t.fare || 0,
-          availableSeats: seg?.available_capacity || t.available_capacity || 0,
+          price,
+          availableSeats: isFinite(availableSeats) ? availableSeats : 0,
         };
       });
 
