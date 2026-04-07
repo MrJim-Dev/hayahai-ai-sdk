@@ -70,11 +70,12 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
     const [context, setContext] = (0, react_1.useState)({});
     const [routes, setRoutes] = (0, react_1.useState)([]);
     const [showDatePicker, setShowDatePicker] = (0, react_1.useState)(false);
-    const [step, setStep] = (0, react_1.useState)("route");
+    const [step, setStep] = (0, react_1.useState)("origin");
     const scrollRef = (0, react_1.useRef)(null);
     const inputRef = (0, react_1.useRef)(null);
     const pendingRouteRef = (0, react_1.useRef)(null);
     const initAttempted = (0, react_1.useRef)(false);
+    const noTripOriginsRef = (0, react_1.useRef)(new Set());
     // ── Config ──────────────────────────────────────────────────────────────
     const [config, setConfig] = (0, react_1.useState)(propConfig ?? null);
     (0, react_1.useEffect)(() => { injectKeyframes(); }, []);
@@ -112,26 +113,14 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
             catch { /* silent */ }
         })();
     }, [routesApiUrl, tenantId]);
-    const ROUTE_PREVIEW_COUNT = 6;
-    const buildRouteOptions = (showAll = false) => {
-        const seen = new Set();
-        const opts = [];
-        for (const r of routes) {
-            if (!isRealPort(r.src_port_name) || !isRealPort(r.dest_port_name))
-                continue;
-            const key = `${r.src_port_code}:${r.dest_port_code}`;
-            if (seen.has(key))
-                continue;
-            seen.add(key);
-            opts.push({
-                label: `🛳️ ${r.src_port_name} → ${r.dest_port_name}`,
-                value: `route:${r.src_port_code}:${r.dest_port_code}`,
-            });
-        }
-        opts.sort((a, b) => a.label.localeCompare(b.label));
-        if (!showAll && opts.length > ROUTE_PREVIEW_COUNT) {
-            const remaining = opts.length - ROUTE_PREVIEW_COUNT;
-            return [...opts.slice(0, ROUTE_PREVIEW_COUNT), { label: `➕ See ${remaining} more route${remaining > 1 ? "s" : ""}`, value: "show_more_routes" }];
+    const ORIGIN_PREVIEW_COUNT = 6;
+    const buildOriginOptions = (showAll = false) => {
+        const origins = getUniqueOriginPorts(routes)
+            .filter((p) => !noTripOriginsRef.current.has(p.code));
+        const opts = origins.map((p) => ({ label: `📍 ${p.name}`, value: `origin:${p.code}:${p.name}:${p.id}` }));
+        if (!showAll && opts.length > ORIGIN_PREVIEW_COUNT) {
+            const remaining = opts.length - ORIGIN_PREVIEW_COUNT;
+            return [...opts.slice(0, ORIGIN_PREVIEW_COUNT), { label: `➕ See ${remaining} more origin${remaining > 1 ? "s" : ""}`, value: "show_more_origins" }];
         }
         return opts;
     };
@@ -142,8 +131,8 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
         initAttempted.current = true;
         setMessages([{
                 id: crypto.randomUUID(), role: "assistant",
-                content: `${welcomeMsg}\n\nWhere would you like to travel?`,
-                interactive: { type: "quick_reply", data: { options: buildRouteOptions() } },
+                content: `${welcomeMsg}\n\nWhere are you traveling from?`,
+                interactive: { type: "quick_reply", data: { options: buildOriginOptions() } },
             }]);
     }, [routes, messages.length, welcomeMsg]);
     // ── Auto-scroll ─────────────────────────────────────────────────────────
@@ -321,12 +310,12 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
     };
     // ── Quick reply handler ─────────────────────────────────────────────────
     const handleQuickReply = async (value, label) => {
-        if (value === "show_more_routes") {
+        if (value === "show_more_origins") {
             setMessages((prev) => {
                 const updated = [...prev];
                 for (let i = updated.length - 1; i >= 0; i--) {
                     if (updated[i].role === "assistant" && updated[i].interactive) {
-                        updated[i] = { ...updated[i], interactive: { type: "quick_reply", data: { options: buildRouteOptions(true) } } };
+                        updated[i] = { ...updated[i], interactive: { type: "quick_reply", data: { options: buildOriginOptions(true) } } };
                         break;
                     }
                 }
@@ -337,32 +326,63 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
         if (value === "start over" || value.toLowerCase().includes("start over")) {
             setContext({});
             setMessages([]);
-            setStep("route");
+            setStep("origin");
             pendingRouteRef.current = null;
             initAttempted.current = false;
             return;
         }
         clearInteractive();
-        if (value === "choose_origin" || value === "choose_route") {
-            addMsg("user", "Choose another route");
-            addMsg("assistant", "Where would you like to travel?", { interactive: { type: "quick_reply", data: { options: buildRouteOptions() } } });
+        if (value === "choose_origin") {
+            addMsg("user", "Choose another port");
+            addMsg("assistant", "Where are you traveling from?", { interactive: { type: "quick_reply", data: { options: buildOriginOptions() } } });
             return;
         }
-        if (value.startsWith("route:")) {
-            const [, srcCode, destCode] = value.split(":");
-            const route = findRouteByPorts(routes, srcCode, destCode);
-            if (!route)
-                return;
-            pendingRouteRef.current = route;
-            setContext((prev) => ({
-                ...prev,
-                originPort: { code: route.src_port_code, name: route.src_port_name, id: route.src_port_id },
-                destinationPort: { code: route.dest_port_code, name: route.dest_port_name, id: route.dest_port_id },
-                selectedRoute: route,
+        if (value.startsWith("origin:")) {
+            const [, code, name, idStr] = value.split(":");
+            const id = parseInt(idStr, 10);
+            setContext((prev) => ({ ...prev, originPort: { code, name, id } }));
+            addMsg("user", `From ${name}`);
+            setIsSearching(true);
+            const destinations = getDestinationsForOrigin(routes, code);
+            const available = [];
+            await Promise.all(destinations.map(async (dest) => {
+                try {
+                    const res = await fetch(`${tripsApiUrl}/available-dates?origin_code=${code}&destination_code=${dest.code}&limit=1`);
+                    if (res.ok) {
+                        const d = await res.json();
+                        if (d.data?.length)
+                            available.push(dest);
+                    }
+                }
+                catch { /* skip */ }
             }));
-            addMsg("user", `${route.src_port_name} → ${route.dest_port_name}`);
+            setIsSearching(false);
+            if (available.length > 0) {
+                available.sort((a, b) => a.name.localeCompare(b.name));
+                addMsg("assistant", `Traveling from **${name}** 📍\n\nWhere would you like to go?`, {
+                    interactive: { type: "quick_reply", data: { options: available.map((p) => ({ label: `🏝️ ${p.name}`, value: `dest:${p.code}:${p.name}:${p.id}` })) } },
+                });
+            }
+            else {
+                noTripOriginsRef.current.add(code);
+                addMsg("assistant", `No upcoming trips from **${name}**. Try another port?`, {
+                    interactive: { type: "quick_reply", data: { options: [{ label: "📍 Choose another port", value: "choose_origin" }] } },
+                });
+            }
+            setStep("destination");
+            return;
+        }
+        if (value.startsWith("dest:")) {
+            const [, code, name, idStr] = value.split(":");
+            const id = parseInt(idStr);
+            const route = findRouteByPorts(routes, context.originPort?.code || "", code);
+            if (route) {
+                pendingRouteRef.current = route;
+                setContext((prev) => ({ ...prev, destinationPort: { code, name, id }, selectedRoute: route }));
+            }
             const opts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ label: `👤 ${n} passenger${n > 1 ? "s" : ""}`, value: `passengers:${n}` }));
-            addMsg("assistant", `**${route.src_port_name} → ${route.dest_port_name}** 🛳️\n\nHow many passengers?`, { interactive: { type: "quick_reply", data: { options: opts } } });
+            addMsg("user", `To ${name}`);
+            addMsg("assistant", `${context.originPort?.name} → **${name}** 🛳️\n\nHow many passengers?`, { interactive: { type: "quick_reply", data: { options: opts } } });
             setStep("passengers");
             return;
         }
