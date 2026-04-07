@@ -48,6 +48,56 @@ const getDestinationsForOrigin = (routes, originCode) => {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 };
 const findRouteByPorts = (routes, o, d) => routes.find((r) => r.src_port_code === o && r.dest_port_code === d);
+/** Fuzzy port name lookup across all routes */
+const findPortInRoutes = (query, routeList) => {
+    const q = query.toLowerCase().trim();
+    const portMap = new Map();
+    for (const r of routeList) {
+        portMap.set(r.src_port_code, { code: r.src_port_code, name: r.src_port_name, id: r.src_port_id });
+        portMap.set(r.dest_port_code, { code: r.dest_port_code, name: r.dest_port_name, id: r.dest_port_id });
+    }
+    const ports = Array.from(portMap.values());
+    // exact substring match
+    let match = ports.find((p) => p.name.toLowerCase().includes(q) || q.includes(p.name.toLowerCase()));
+    if (match)
+        return match;
+    // word-overlap fallback (e.g. "talisay" inside "Talisay, Cebu")
+    const words = q.split(/\s+/);
+    match = ports.find((p) => words.some((w) => w.length >= 4 && p.name.toLowerCase().includes(w)));
+    return match ?? null;
+};
+/** Parse "Apr. 11, 2026" / "Apr 11, 2026" / "2026-04-11" → "YYYY-MM-DD" or null */
+const parseDateHint = (hint) => {
+    const MONTHS = {
+        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+    };
+    if (/^\d{4}-\d{2}-\d{2}$/.test(hint))
+        return hint;
+    const m = hint.match(/([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})/);
+    if (m) {
+        const mo = MONTHS[m[1].toLowerCase().slice(0, 3)];
+        if (mo !== undefined) {
+            const day = parseInt(m[2], 10);
+            const year = parseInt(m[3], 10);
+            return `${year}-${String(mo + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        }
+    }
+    return null;
+};
+/** Detect "from X to Y [at/on DATE]" intent from free-form text */
+const detectTypedRoute = (text) => {
+    const t = text.toLowerCase();
+    // Strip trailing date phrase so it doesn't bleed into dest name
+    const stripped = t.replace(/\s+(?:at|on)\s+[\w,.\s]+\d{4}.*$/, "").trim();
+    const fromTo = stripped.match(/from\s+(.+?)\s+to\s+(.+?)(?:\?|$)/);
+    if (!fromTo)
+        return null;
+    // Extract date from original text
+    const dateMatch = text.match(/(\d{4}-\d{2}-\d{2})|([A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4})/);
+    const parsedDate = dateMatch ? parseDateHint(dateMatch[0]) : null;
+    return { src: fromTo[1].trim(), dest: fromTo[2].trim(), parsedDate };
+};
 const buildContextSummary = (ctx) => {
     const parts = [];
     if (ctx.originPort)
@@ -353,7 +403,7 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
         }
     }, [context, messages, chatApiUrl]);
     // ── Form submit ─────────────────────────────────────────────────────────
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const txt = input.trim();
         if (!txt)
@@ -374,6 +424,43 @@ function TripSearchWidget({ chatApiUrl = "/api/chat-booking", routesApiUrl = "/a
                 return;
             }
         }
+        // ── Route intercept: "from X to Y [at/on DATE]" ───────────────────────
+        if (routes.length > 0) {
+            const rq = detectTypedRoute(txt);
+            if (rq) {
+                const srcPort = findPortInRoutes(rq.src, routes);
+                const destPort = findPortInRoutes(rq.dest, routes);
+                if (srcPort && destPort && srcPort.code !== destPort.code) {
+                    const route = findRouteByPorts(routes, srcPort.code, destPort.code);
+                    if (route) {
+                        setInput("");
+                        clearInteractive();
+                        addMsg("user", txt);
+                        pendingRouteRef.current = route;
+                        setContext((prev) => ({
+                            ...prev,
+                            originPort: { code: route.src_port_code, name: route.src_port_name, id: route.src_port_id },
+                            destinationPort: { code: route.dest_port_code, name: route.dest_port_name, id: route.dest_port_id },
+                            selectedRoute: route,
+                        }));
+                        if (rq.parsedDate) {
+                            // Date supplied — search immediately with defaults (1 pax, 0 vehicles)
+                            setContext((prev) => ({ ...prev, departureDate: rq.parsedDate, passengerCount: prev.passengerCount ?? 1, vehicleCount: prev.vehicleCount ?? 0 }));
+                            setStep("complete");
+                            await searchTrips(rq.parsedDate, 1, 0);
+                        }
+                        else {
+                            // No date — ask passengers
+                            const opts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => ({ label: `👤 ${n} passenger${n > 1 ? "s" : ""}`, value: `passengers:${n}` }));
+                            addMsg("assistant", `**${route.src_port_name} → ${route.dest_port_name}** 🛳️\n\nHow many passengers?`, { interactive: { type: "quick_reply", data: { options: opts } } });
+                            setStep("passengers");
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
         sendToAI(txt);
     };
     // ── Quick reply handler ─────────────────────────────────────────────────
